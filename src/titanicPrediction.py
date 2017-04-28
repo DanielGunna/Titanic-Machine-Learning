@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 # Machine Learning
 from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC, SVC
 from sklearn import tree
 from sklearn.svm import SVC
 from sklearn.linear_model import Perceptron
@@ -55,11 +56,18 @@ def visualizeNumericalCorrelation( data, feature1, feature2 ):
  g = sns.FacetGrid(data, col=feature2)
  g.map(plt.hist, feature1, bins=20)
  g.savefig("output.png")
+ 
+def visualizeScatter( data, feature1, feature2 ):
+ g = sns.FacetGrid(data, col='Survived',  hue="Survived")
+ g = (g.map(plt.scatter, feature1, feature2, edgecolor="w")
+      .add_legend())
+ g.savefig("output2.png")
 
 def visualizeSurvivedCorrelation(  feature1, feature2 ):
  grid = sns.FacetGrid(train_df, col='Survived', row=feature2, size=2.2, aspect=1.6)
  grid.map(plt.hist, feature1, alpha=.5, bins=20)
  grid.add_legend();
+ grid.savefig("output3.png")
 
 def classifyWithLogisticRegression ( trainingData, results, testData ):
  clf_logreg = LogisticRegression()
@@ -135,26 +143,25 @@ def normalizeEmbarked( ):
    dataset['Embarked'] = dataset['Embarked'].map( {'S': 0, 'C': 1, 'Q': 2} ).astype(int)
 
 def normalizeFare():
- global train_df, test_df
- test_df['Fare'].fillna(test_df['Fare'].dropna().median(), inplace=True)
- train_df['FareBand'] = pd.qcut(train_df['Fare'], 4)
- train_df[['FareBand', 'Survived']].groupby(['FareBand'], as_index=False).mean().sort_values(by='FareBand', ascending=True)
 
  for dataset in combine:
-   dataset.loc[ dataset['Fare'] <= 7.91, 'Fare'] = 0
-   dataset.loc[(dataset['Fare'] > 7.91) & (dataset['Fare'] <= 14.454), 'Fare'] = 1
-   dataset.loc[(dataset['Fare'] > 14.454) & (dataset['Fare'] <= 31), 'Fare']   = 2
-   dataset.loc[ dataset['Fare'] > 31, 'Fare'] = 3
+   dataset.loc[(dataset['Fare'] < 9), 'Fare'] = 0
+   dataset.loc[(dataset['Fare'] >= 9) & (dataset ['Fare'] < 12), 'Fare'] = 1
+   dataset.loc[(dataset['Fare'] >= 12) & (dataset ['Fare'] < 15), 'Fare'] = 2
+   dataset.loc[(dataset['Fare'] >= 15) & (dataset ['Fare'] < 20), 'Fare'] = 3
+   dataset.loc[(dataset['Fare'] >= 20) & (dataset ['Fare'] < 30), 'Fare'] = 4
+   dataset.loc[(dataset['Fare'] >= 30) & (dataset ['Fare'] < 55), 'Fare'] = 5
+   dataset.loc[(dataset['Fare'] >= 55) & (dataset ['Fare'] < 95), 'Fare'] = 6
+   dataset.loc[(dataset['Fare'] >= 95),'Fare'] = 7
    dataset['Fare'] = dataset['Fare'].astype(int)
 
- train_df = train_df.drop(['Parch', 'SibSp'], axis=1)
- test_df = test_df.drop(['Parch', 'SibSp'], axis=1)
- train_df = train_df.drop(['FareBand'], axis=1)
 
 
 def normalizeAgeClass( ):
  for dataset in combine:
+   dataset['Age*Class*Fare'] = dataset.Age * dataset.Pclass * dataset.Fare
    dataset['Age*Class'] = dataset.Age * dataset.Pclass
+   dataset['Age*Fare'] = dataset.Age * dataset.Fare
 
 
 def normalizeData( ):
@@ -163,10 +170,15 @@ def normalizeData( ):
  setAgeBoundaries( )
  normalizeFamily( )
  normalizeEmbarked( )
- normalizeAgeClass( )
  normalizeFare( )
+ normalizeAgeClass( )
+ 
 
 
+def getFareClass(data,cat):
+ return data.loc[data['Fare'] == cat]
+ 
+         
 
 def main ( ):
  global train_df
@@ -176,18 +188,35 @@ def main ( ):
  # Training and Testing Data
  train_df = pd.read_csv('../input/train.csv')
  test_df = pd.read_csv('../input/test.csv')
-
  # Drop Useless Features
  train_df = train_df.drop(['Ticket', 'Cabin', 'Name'], axis=1)
  test_df = test_df.drop(['Ticket', 'Cabin', 'Name'], axis=1)
+ visualizeNumericalCorrelation(train_df,'Fare','Survived')
+ visualizeNumericalCorrelation(train_df,'Age','Survived')
+ 
+ 
+ test_df['Fare'].fillna(test_df['Fare'].dropna().median(), inplace=True)
+ train_df['FareBand'] = pd.qcut(train_df['Fare'], 4)
+ train_df[['FareBand', 'Survived']].groupby(['FareBand'], as_index=False).mean().sort_values(by='FareBand', ascending=True)
 
  # Normalize both data sets
  combine = [train_df, test_df]
  normalizeData( )
+ train_df = train_df.drop(['Parch', 'SibSp'], axis=1)
+ test_df = test_df.drop(['Parch', 'SibSp'], axis=1)
+ train_df = train_df.drop(['FareBand'], axis=1)
+
+ 
+ 
+ print  ("------------------Age--------------------")
  print (pivotingData( train_df, 'Age', 'Survived', 'Age', 'Survived' ))
- visualizeNumericalCorrelation(train_df,'Age','Survived')
+ print  ("------------------Fare--------------------")
+ print (pivotingData( train_df, 'Fare', 'Survived', 'Fare', 'Survived' ))
+ 
+ #visualizeNumericalCorrelation(getFareClass(train_df,0),'Age','Survived')
 
  combine = [train_df, test_df]
+ printGeneralInformation(train_df)
 
  # Setting up data
  X_train = train_df.drop(["Survived","PassengerId","Fare","Age","Pclass"], axis=1)
@@ -196,8 +225,9 @@ def main ( ):
  X_train.shape, Y_train.shape, X_test.shape
 
  print (X_train)
+
  # Use predictive model (ML)
- prediction = classifyWithDecisionTree(X_train, Y_train, X_test)
+ prediction = classifyWithRandomForest(X_train, Y_train, X_test)
 
  #Build the answer
  submission = pd.DataFrame({
